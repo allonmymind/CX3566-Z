@@ -55,6 +55,7 @@ on:
           - bt-100m
           - bt-1000m
           - cd1000
+          - cl3566-a
           - chainedbox
           - cm3588-nas
           - crrc

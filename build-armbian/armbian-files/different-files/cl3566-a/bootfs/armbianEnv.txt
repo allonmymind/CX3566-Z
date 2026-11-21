@@ -1,0 +1,15 @@
+verbosity=7
+bootlogo=false
+fdtfile=rockchip/rk3566-cl3566-a.dtb
+rootdev=/dev/mmcblk0p2
+rootfstype=ext4
+rootflags=rw,errors=remount-ro
+console=serial
+consoleargs=console=ttyS2,1500000
+earlycon=on
+earlyconargs=earlycon=uart8250,mmio32,0xfe660000
+extraargs=rw rootwait
+extraboardargs=net.ifnames=0 max_loop=128 cma=256M
+overlay_prefix=rk3566
+overlays=
+user_overlays=
