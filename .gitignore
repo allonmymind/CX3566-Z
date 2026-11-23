@@ -2,7 +2,11 @@
 /build
 /tmp_dir
 /build-armbian/kernel
-/build-armbian/u-boot
+/build-armbian/u-boot/*
+!/build-armbian/u-boot/rockchip/
+/build-armbian/u-boot/rockchip/*
+!/build-armbian/u-boot/rockchip/cl3566-a/
+!/build-armbian/u-boot/rockchip/cl3566-a/**
 /compile-kernel/kernel
 /compile-kernel/output
 /compile-kernel/tools/armbian
