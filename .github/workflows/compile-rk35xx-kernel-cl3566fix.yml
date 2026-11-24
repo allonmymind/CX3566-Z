@@ -1,0 +1,109 @@
+#==========================================================================
+# 专门编译带 maxio PHY 修复的 RK35xx (rk3566) 内核
+# 源码: ophub/linux-6.1.y-rockchip (main)
+# 配置: ophub/kernel kernel-config/release/rk35xx/config-6.1
+# 补丁: kernel-patch/common-kernel-patches/99-fix-maxio-mae0621a-q3c-vendor-seq.patch
+# 签名: -cl3566fix  (产物形如 6.1.174-cl3566fix)
+#==========================================================================
+
+name: Compile RK35xx kernel (cl3566 maxio fix)
+
+on:
+  workflow_dispatch:
+
+env:
+  TZ: Etc/UTC
+
+jobs:
+  setup:
+    runs-on: ubuntu-26.04-arm
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set build matrix
+        id: set-matrix
+        run: |
+          echo 'matrix={"include":[{"kernel_version":"6.1.y"}]}' >> "${GITHUB_OUTPUT}"
+
+  build:
+    needs: setup
+    runs-on: ubuntu-26.04-arm
+    if: ${{ github.event.repository.owner.id == github.event.sender.id }}
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+
+    name: compile-rk35xx-${{ matrix.kernel_version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Initialize the build environment
+        id: init
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          docker rmi -f $(docker images -q) 2>/dev/null || true
+          [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOLSDIRECTORY}"
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android 2>/dev/null
+          sudo swapoff -f /swapfile 2>/dev/null || true
+          sudo rm -f /swapfile /mnt/swapfile
+          sudo apt-get -y update
+          sudo apt-get -y install $(curl -fsSL https://ophub.org/ubuntu2604-build-armbian-depends)
+          sudo apt-get clean
+          sudo timedatectl set-timezone "${TZ:-Etc/UTC}" || true
+          echo "status=success" >> ${GITHUB_OUTPUT}
+
+      - name: Create virtual disk for extended storage
+        id: disk
+        run: |
+          root_avail=$(df --block-size=1G / | tail -1 | awk '{print $4}')
+          root_size=$(( root_avail - 4 ))
+          [[ "${root_size}" -gt 0 ]] || { echo "Error: Insufficient space: ${root_avail}G"; exit 1; }
+          sudo truncate -s "${root_size}"G /root.img
+          build_dev=$(sudo losetup --find --show /root.img)
+          sudo mkfs.xfs -f -i sparse=0 -b size=4096 "${build_dev}"
+          sudo mkdir -p /builder
+          sudo mount "${build_dev}" /builder
+          sudo chown -R runner:runner /builder
+          df -Th
+          echo "status=success" >> ${GITHUB_OUTPUT}
+
+      - name: Compile RK35xx kernel with maxio patch
+        uses: ophub/amlogic-s9xxx-armbian@main
+        if: ${{ steps.disk.outputs.status == 'success' && !cancelled() }}
+        with:
+          build_target: kernel
+          kernel_source: ophub/linux-6.1.y-rockchip
+          kernel_version: ${{ matrix.kernel_version }}
+          kernel_auto: true
+          kernel_package: all
+          kernel_sign: -cl3566fix
+          kernel_toolchain: gcc
+          config_flavor: rk35xx
+          kernel_patch: kernel-patch
+          auto_patch: true
+          delete_source: true
+          ccache_clear: false
+          docker_hostpath: /builder
+          docker_image: ophub/armbian-noble:arm64
+
+      - name: Upload Kernel to Release
+        uses: ophub/upload-to-releases@main
+        if: ${{ env.PACKAGED_STATUS == 'success' && !cancelled() }}
+        with:
+          tag: kernel_rk35xx
+          artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
+          allow_updates: true
+          remove_artifacts: false
+          replaces_artifacts: true
+          make_latest: false
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
+          body: |
+            - RK35xx (rk3566) kernel 6.1.y with maxio MAE0621A-Q3C vendor init sequence fix.
+            - Fixes eth0 TX failure on CL3566-A by restoring vendor v1.8.1.2 PHY init registers.
+            - Kernel sign: -cl3566fix

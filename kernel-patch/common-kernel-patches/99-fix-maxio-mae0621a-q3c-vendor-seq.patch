@@ -1,0 +1,109 @@
+--- a/drivers/net/phy/maxio.c
++++ b/drivers/net/phy/maxio.c
+@@ -679,67 +679,51 @@
+ 	phydev_info(phydev, "initializing Maxio MAE0621A-Q3C/Q3I PHY (%s)\n",
+ 		    MAXIO_PHY_VER);
+ 
+-	/* MDC and auto-speed-down */
+-	ret = maxio_write_paged(phydev, 0xdab, 0x17, 0x0f13);
+-	if (ret < 0)
+-		return ret;
+-	ret = maxio_write_paged(phydev, 0xd8f, 0x10, 0x0300);
+-	if (ret < 0)
+-		return ret;
++	/*
++	 * Exact register sequence recovered by disassembling the vendor
++	 * maxio.c v1.8.1.2 kernel driver (maxio_mae0621aq3ci_config_init).
++	 * The community rewrite (v2.0.0) omitted several writes and used
++	 * wrong values for others, which leaves the analog front-end in a
++	 * state where 100M/1000M reception is marginal.  Keep this 1:1 with
++	 * the vendor sequence - do not "clean it up".
++	 */
++#define VENDOR_WRITE(page, reg, val)			\
++	do {						\
++		ret = maxio_write_paged(phydev, page, reg, val); \
++		if (ret < 0)				\
++			return ret;			\
++	} while (0)
++
++	VENDOR_WRITE(0xa43, 0x19, 0x0823);   /* PHYCR2: CLKOUT_EN | 125M */
++	VENDOR_WRITE(0xdab, 0x17, 0x0c13);   /* was 0x0f13 (wrong) */
++	VENDOR_WRITE(0xd96, 0x15, 0xc08a);
++	VENDOR_WRITE(0xda4, 0x12, 0x07bc);
++	VENDOR_WRITE(0xd8f, 0x16, 0x2500);
++	VENDOR_WRITE(0xd90, 0x16, 0x1555);
++	VENDOR_WRITE(0xd92, 0x11, 0x2b15);
++	VENDOR_WRITE(0xd96, 0x16, 0x4010);
++	VENDOR_WRITE(0xda5, 0x11, 0x4a12);
++	VENDOR_WRITE(0xda5, 0x12, 0x4a12);
++	VENDOR_WRITE(0xd99, 0x16, 0x000a);
++	VENDOR_WRITE(0xd95, 0x13, 0x5b00);
++	VENDOR_WRITE(0xd8f, 0x10, 0x0300);
++	VENDOR_WRITE(0xd98, 0x17, 0x8506);   /* omitted by v2.0.0 */
++	VENDOR_WRITE(0xd95, 0x12, 0x6870);   /* omitted by v2.0.0 */
++	VENDOR_WRITE(0xd93, 0x15, 0x0940);   /* omitted by v2.0.0 */
++	VENDOR_WRITE(0xdad, 0x12, 0x1303);   /* omitted by v2.0.0 */
++	VENDOR_WRITE(0xda8, 0x11, 0x0177);   /* was 0x0175 (wrong) */
++	VENDOR_WRITE(0xda8, 0x10, 0x09a9);   /* omitted by v2.0.0 */
++	VENDOR_WRITE(0xa42, 0x12, 0x0028);   /* omitted by v2.0.0 */
++	VENDOR_WRITE(0x000, 0x04, 0x0de1);   /* ANAR, omitted by v2.0.0 */
++	VENDOR_WRITE(0xd04, 0x10, 0x0258);   /* LEDCR, vendor value */
++	VENDOR_WRITE(0x000, 0x00, 0x9140);   /* BMCR soft reset + aneg */
+ 
+-	/* analogue front-end tuning */
+-	ret = maxio_write_paged(phydev, 0xd96, 0x15, 0xc08a);
+-	if (ret < 0)
+-		return ret;
+-	ret = maxio_write_paged(phydev, 0xda4, 0x12, 0x07bc);
+-	if (ret < 0)
+-		return ret;
+-	ret = maxio_write_paged(phydev, 0xd8f, 0x16, 0x2500);
+-	if (ret < 0)
+-		return ret;
+-	ret = maxio_write_paged(phydev, 0xd90, 0x16, 0x1555);
+-	if (ret < 0)
+-		return ret;
+-	ret = maxio_write_paged(phydev, 0xd92, 0x11, 0x2b15);
+-	if (ret < 0)
+-		return ret;
+-	ret = maxio_write_paged(phydev, 0xd96, 0x16, 0x4010);
+-	if (ret < 0)
+-		return ret;
+-	ret = maxio_write_paged(phydev, 0xda5, 0x11, 0x4a12);
+-	if (ret < 0)
+-		return ret;
+-	ret = maxio_write_paged(phydev, 0xda5, 0x12, 0x4a12);
+-	if (ret < 0)
+-		return ret;
+-	ret = maxio_write_paged(phydev, 0xda8, 0x11, 0x0175);
+-	if (ret < 0)
+-		return ret;
+-	ret = maxio_write_paged(phydev, 0xd99, 0x16, 0x000a);
+-	if (ret < 0)
+-		return ret;
+-	ret = maxio_write_paged(phydev, 0xd95, 0x13, 0x5b00);
+-	if (ret < 0)
+-		return ret;
+-
+-	/* CLKOUT enabled, 125MHz */
+-	ret = maxio_write_paged(phydev, 0xa43, MAE0621A_PHYCR2,
+-				MAE0621A_CLKOUT_CFG);
+-	if (ret < 0)
+-		return ret;
+-
+-	/* soft reset / restart auto-negotiation */
+-	ret = maxio_write_paged(phydev, 0x0, MII_BMCR, 0x9140);
+-	if (ret < 0)
+-		return ret;
++#undef VENDOR_WRITE
+ 
+ 	ret = phy_write(phydev, MAE0621A_PAGE_SELECT, 0);
+ 	if (ret < 0)
+ 		return ret;
+ 
+-	/* Re-apply the LED configuration after the reset above. */
+-	mae0621a_restore_leds(phydev);
+-
+ 	msleep(100);
+ 
+ 	return 0;
