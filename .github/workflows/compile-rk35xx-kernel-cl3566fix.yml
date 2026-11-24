@@ -1,7 +1,7 @@
 #==========================================================================
 # 专门编译带 maxio PHY 修复的 RK35xx (rk3566) 内核
 # 源码: ophub/linux-6.1.y-rockchip (main)
-# 配置: ophub/kernel kernel-config/release/rk35xx/config-6.1
+# 配置: kernel-config/release/rk35xx/config-6.1 (从 ophub/kernel 复制, 含 CONFIG_MAXIO_PHY=y)
 # 补丁: kernel-patch/common-kernel-patches/99-fix-maxio-mae0621a-q3c-vendor-seq.patch
 # 签名: -cl3566fix  (产物形如 6.1.174-cl3566fix)
 #==========================================================================
@@ -84,6 +84,7 @@ jobs:
           kernel_package: all
           kernel_sign: -cl3566fix
           kernel_toolchain: gcc
+          kernel_config: kernel-config/release/rk35xx
           config_flavor: rk35xx
           kernel_patch: kernel-patch
           auto_patch: true
