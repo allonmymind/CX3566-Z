@@ -1,0 +1,51 @@
+name: Rename 6.1.118-ophub bundle to plain 6.1.118
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rename:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download injected bundle from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          gh release download kernel_rk35xx \
+            --repo ${{ github.repository }} \
+            --pattern '6.1.118-ophub.tar.gz' \
+            --dir work
+          ls -lh work/
+
+      - name: Rename inner dir and repack as 6.1.118.tar.gz
+        run: |
+          set -e
+          BUNDLE=work/6.1.118-ophub.tar.gz
+          rm -rf unpack && mkdir -p unpack
+          tar -mxzf "${BUNDLE}" -C unpack
+          OLD=$(find unpack -mindepth 1 -maxdepth 1 -type d | head -n1)
+          echo "old inner dir: ${OLD}"
+          # 确认内部文件名均为纯 6.1.118（boot/modules/header/dtb），sha256 不用改
+          echo "=== sha256sums ==="
+          cat "${OLD}/sha256sums"
+          # 内层目录 6.1.118-ophub -> 6.1.118
+          mv "${OLD}" "$(dirname "${OLD}")/6.1.118"
+          NEW="$(dirname "${OLD}")/6.1.118"
+          echo "new inner dir: ${NEW}"
+          ls -lh "${NEW}"
+          # 重打包为 asset 6.1.118.tar.gz；sha256sums 内部文件名未变，无需改
+          tar -czf work/6.1.118.tar.gz -C unpack 6.1.118
+          ls -lh work/6.1.118.tar.gz
+
+      - name: Upload renamed bundle as 6.1.118.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          gh release upload kernel_rk35xx work/6.1.118.tar.gz \
+            --repo ${{ github.repository }} --clobber
+          echo "Uploaded 6.1.118.tar.gz (injected factory aic8800 modules, plain version names)"
