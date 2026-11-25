@@ -7905,6 +7905,17 @@
 		};
 	};
 
+	leds-board {
+		compatible = "gpio-leds";
+
+		status-blue {
+			label = "blue:status";
+			gpios = <0x3d 0x1e 0x00>;
+			linux,default-trigger = "heartbeat";
+			default-state = "on";
+		};
+	};
+
 	dummy-codec {
 		status = "disabled";
 		compatible = "rockchip,dummy-codec";
