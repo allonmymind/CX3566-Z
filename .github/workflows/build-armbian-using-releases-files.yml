@@ -57,6 +57,7 @@ on:
           - cd1000
           - chainedbox
           - cm3588-nas
+          - cx3566-z
           - crrc
           - dc-a588
           - dg3399
