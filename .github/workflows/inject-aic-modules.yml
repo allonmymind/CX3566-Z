@@ -11,46 +11,83 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install kmod
         run: sudo apt-get update -qq && sudo apt-get install -y -qq kmod
 
-      - name: Download modules package from release
+      - name: Download kernel bundle from release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           gh release download kernel_rk35xx \
             --repo ${{ github.repository }} \
-            --pattern 'modules-6.1.118.tar.gz' \
+            --pattern '6.1.118-ophub.tar.gz' \
             --dir work
           ls -lh work/
 
-      - name: Inject factory aic8800 driver and rebuild depmod
+      - name: Inject factory aic8800 driver, drop old driver, rebuild depmod
         run: |
           set -e
           KVER=6.1.118
-          mkdir -p root && tar -mxzf work/modules-${KVER}.tar.gz -C root
-          DEST="root/lib/modules/${KVER}/kernel/drivers/net/wireless/aicsemi/aic8800/sdio/factory"
+          BUNDLE=work/6.1.118-ophub.tar.gz
+
+          # 1) Unpack the outer bundle
+          rm -rf unpack && mkdir -p unpack
+          tar -mxzf "${BUNDLE}" -C unpack
+          BD=$(find unpack -mindepth 1 -maxdepth 1 -type d | head -n1)
+          echo "Bundle inner dir: ${BD}"
+          ls -lh "${BD}"
+
+          # 2) Locate and unpack the modules sub-tarball
+          MODTAR=$(find "${BD}" -name 'modules-*.tar.gz' | head -n1)
+          echo "Modules tarball: ${MODTAR}"
+          rm -rf modroot && mkdir -p modroot
+          tar -mxzf "${MODTAR}" -C modroot
+
+          # 3) Locate the module root dir named ${KVER}
+          MODDIR=$(find modroot -type d -name "${KVER}" | head -n1)
+          echo "Module dir: ${MODDIR}"
+          [ -n "${MODDIR}" ] || { echo "module dir not found"; find modroot -maxdepth 3 -type d; exit 1; }
+
+          # 4) Inject factory driver into a dedicated folder
+          DEST="${MODDIR}/kernel/drivers/net/wireless/aicsemi/aic8800/sdio/factory"
           mkdir -p "${DEST}"
           cp -f cl3566-vendor/aic8800/aic8800_bsp.ko   "${DEST}/"
           cp -f cl3566-vendor/aic8800/aic8800_fdrv.ko  "${DEST}/"
           cp -f cl3566-vendor/aic8800/aic8800_btlpm.ko "${DEST}/"
-          # Remove ophub old aic8800 driver so it never auto-loads.
-          rm -f root/lib/modules/${KVER}/kernel/drivers/net/wireless/aicsemi/aic8800/sdio/bsp/aic8800_sdio_bsp.ko
-          rm -f root/lib/modules/${KVER}/kernel/drivers/net/wireless/aicsemi/aic8800/sdio/btlpm/aic8800_sdio_bt.ko
-          rm -f root/lib/modules/${KVER}/kernel/drivers/net/wireless/aicsemi/aic8800/sdio/fdrv/aic8800_sdio_wlan.ko
-          sudo depmod -a -b "${PWD}/root" "${KVER}"
-          echo "=== injected modules in modules.dep ==="
-          grep -E 'aic8800_(bsp|fdrv|btlpm)' "root/lib/modules/${KVER}/modules.dep" || true
-          tar -czf work/modules-${KVER}.tar.gz -C root .
 
-      - name: Upload patched modules package (replace asset)
+          # 5) Remove ophub's old aic8800 driver so it can never auto-load
+          find "${MODDIR}/kernel/drivers/net/wireless/aicsemi/aic8800" \
+               -type f \( -name 'aic8800_sdio_*.ko' -o -name 'aic8800_usb_*.ko' \) -delete
+
+          # 6) Rebuild module dependency index.
+          #    depmod -b <base> expects <base>/lib/modules/${KVER}, but the
+          #    tarball layout is just ${KVER}/ at top level. So build a temp
+          #    staging tree that matches depmod's expectation.
+          rm -rf depstage && mkdir -p "depstage/lib/modules"
+          cp -a "${MODDIR}" "depstage/lib/modules/${KVER}"
+          sudo depmod -a -b "${PWD}/depstage" "${KVER}"
+
+          STAGED="depstage/lib/modules/${KVER}"
+          echo "=== factory modules now in modules.dep ==="
+          grep -E 'aic8800_(bsp|fdrv|btlpm)' "${STAGED}/modules.dep" || true
+          echo "=== old driver entries (should be empty) ==="
+          grep -E 'aic8800_sdio_|aic8800_usb_' "${STAGED}/modules.dep" || true
+
+          # 7) Repack modules sub-tarball in ORIGINAL layout (${KVER}/ at top).
+          tar -czf "${MODTAR}" -C "${PWD}/depstage/lib/modules" "${KVER}"
+
+          # 8) Repack the outer bundle
+          tar -czf "${BUNDLE}" -C unpack "$(basename "${BD}")"
+          ls -lh "${BUNDLE}"
+
+      - name: Upload patched bundle (replace asset)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          gh release upload kernel_rk35xx work/modules-6.1.118.tar.gz \
+          gh release upload kernel_rk35xx work/6.1.118-ophub.tar.gz \
             --repo ${{ github.repository }} --clobber
-          echo "Uploaded patched modules-6.1.118.tar.gz"
+          echo "Uploaded patched 6.1.118-ophub.tar.gz with factory aic8800 modules"
