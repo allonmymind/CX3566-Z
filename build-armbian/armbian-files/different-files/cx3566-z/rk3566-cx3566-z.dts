@@ -5063,6 +5063,34 @@
 			interrupt-controller;
 			#interrupt-cells = <0x02>;
 			phandle = <0xd8>;
+
+			usb-otg-vbus-hog {
+				gpio-hog;
+				gpios = <0x1a 0x00>;
+				output-high;
+				line-name = "usb-otg-vbus";
+			};
+
+			usb-host-pwren-hog {
+				gpio-hog;
+				gpios = <0x1b 0x00>;
+				output-high;
+				line-name = "usb-host-pwren";
+			};
+
+			usb-hub-pwren-hog {
+				gpio-hog;
+				gpios = <0x1c 0x00>;
+				output-high;
+				line-name = "usb-hub-pwren";
+			};
+
+			usb-host3-pwren-hog {
+				gpio-hog;
+				gpios = <0x1d 0x00>;
+				output-high;
+				line-name = "usb-host3-pwren";
+			};
 		};
 
 		gpio@fe770000 {
