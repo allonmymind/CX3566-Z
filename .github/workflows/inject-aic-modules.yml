@@ -79,7 +79,21 @@ jobs:
           # 7) Repack modules sub-tarball in ORIGINAL layout (${KVER}/ at top).
           tar -czf "${MODTAR}" -C "${PWD}/depstage/lib/modules" "${KVER}"
 
-          # 8) Repack the outer bundle
+          # 8) Refresh sha256sums entry for the patched modules tarball.
+          #    The bundle carries a sha256sums manifest; ophub verifies it on
+          #    download. Since the modules tarball changed, update its hash.
+          SHAFILE="${BD}/sha256sums"
+          if [ -f "${SHAFILE}" ]; then
+            MODNAME=$(basename "${MODTAR}")
+            NEWSHA=$(sha256sum "${MODTAR}" | awk '{print $1}')
+            echo "Updating ${MODNAME} sha256 -> ${NEWSHA}"
+            sed -i -E "s|^[0-9a-f]+[[:space:]]+(\\*)?${MODNAME}$|${NEWSHA}  ${MODNAME}|" "${SHAFILE}"
+            grep -q "${MODNAME}" "${SHAFILE}" || echo "${NEWSHA}  ${MODNAME}" >> "${SHAFILE}"
+            echo "=== refreshed sha256sums ==="
+            cat "${SHAFILE}"
+          fi
+
+          # 9) Repack the outer bundle
           tar -czf "${BUNDLE}" -C unpack "$(basename "${BD}")"
           ls -lh "${BUNDLE}"
 
