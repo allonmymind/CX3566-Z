@@ -6,7 +6,7 @@
 #   - Kconfig 加 MAXIO_PHY, Makefile 加 maxio.o
 # 配置: kernel-config/release/rk35xx/config-6.1 (含 CONFIG_MAXIO_PHY=y)
 # 补丁: 不启用 (修复已内置源码, 避免旧 99 补丁重复打导致失败)
-# 签名: -cl3566fix  (产物形如 6.1.118-cl3566fix)
+# 签名: 空  (产物形如 6.1.118; vermagic 与原厂 aic8800 模块逐字匹配, 便于直接加载原厂驱动)
 #==========================================================================
 
 name: Compile RK35xx kernel 6.1.118 (cl3566 maxio)
@@ -85,7 +85,7 @@ jobs:
           kernel_version: ${{ matrix.kernel_version }}
           kernel_auto: false
           kernel_package: all
-          kernel_sign: -cl3566fix
+          kernel_sign: ""
           kernel_toolchain: gcc
           kernel_config: kernel-config/release/rk35xx
           config_flavor: rk35xx
@@ -111,4 +111,4 @@ jobs:
             - RK35xx (rk3566) kernel 6.1.118 (rockchip BSP rk-6.1-rkr6.1, same baseline as vendor factory OS).
             - Maxio MAE0621A PHY driver with vendor v1.8.1.2 init sequence (23 register writes) built into source.
             - Full matching set: vmlinuz + initrd + uInitrd + modules + dtb (no mixed-version initrd).
-            - Kernel sign: -cl3566fix
+            - Kernel sign: (none, vanilla 6.1.118 vermagic to match factory aic8800 modules)
