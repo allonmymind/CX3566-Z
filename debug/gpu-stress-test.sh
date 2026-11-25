@@ -82,26 +82,32 @@ say "Phase A done: temp_max_so_far=${MAX_TEMP_SEEN} C"
 # ---------- Phase B: rendering load + CPU co-stress ----------
 say "--- Phase B: load for ${LOAD_SECS}s ---"
 LOAD_DESC="pinned only (no renderer found)"
+LOAD_PIDS=""
 if command -v kmscube >/dev/null 2>&1; then
     timeout "$LOAD_SECS" kmscube -D /dev/dri/card0 > /tmp/kmscube.out 2>&1 &
+    LOAD_PIDS="$!"
     LOAD_DESC="kmscube on /dev/dri/card0"
 elif command -v glmark2-es2-drm >/dev/null 2>&1; then
     timeout "$LOAD_SECS" glmark2-es2-drm > /tmp/kmscube.out 2>&1 &
+    LOAD_PIDS="$!"
     LOAD_DESC="glmark2-es2-drm"
 else
     say "NOTE: kmscube not installed (apt install -y kmscube); running pinned soak + CPU stress only"
 fi
 say "load: $LOAD_DESC + 4x CPU burn"
-for i in 1 2 3 4; do ( timeout "$LOAD_SECS" sh -c 'while :; do :; done' ) & done
+for i in 1 2 3 4; do ( timeout "$LOAD_SECS" sh -c 'while :; do :; done' ) & LOAD_PIDS="$LOAD_PIDS $!"; done
 
 END=$((SECONDS + LOAD_SECS))
 while [ $SECONDS -lt $END ]; do
     T=$(max_temp); [ "$T" -gt "$MAX_TEMP_SEEN" ] && MAX_TEMP_SEEN=$T
     F=$(cat "$DEVFREQ/cur_freq")
     [ "$F" -lt "$MIN_FREQ_LOAD" ] && MIN_FREQ_LOAD=$F
+    if [ $((SECONDS % 30)) -lt 5 ]; then say "  load: freq=$F temp=$(max_temp) C"; fi
     sleep 5
 done
-wait 2>/dev/null
+# Wait only for our own load children. A bare `wait` also waits for the
+# tee process substitution and deadlocks (found the hard way, 2026-11-25).
+wait $LOAD_PIDS 2>/dev/null
 if [ -s /tmp/kmscube.out ]; then
     say "renderer output (tail): $(tail -2 /tmp/kmscube.out | tr '\n' ' ')"
 fi
