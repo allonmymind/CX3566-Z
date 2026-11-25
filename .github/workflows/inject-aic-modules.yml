@@ -1,0 +1,56 @@
+name: Inject factory aic8800 modules into 6.1.118 kernel
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inject:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install kmod
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq kmod
+
+      - name: Download modules package from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          gh release download kernel_rk35xx \
+            --repo ${{ github.repository }} \
+            --pattern 'modules-6.1.118.tar.gz' \
+            --dir work
+          ls -lh work/
+
+      - name: Inject factory aic8800 driver and rebuild depmod
+        run: |
+          set -e
+          KVER=6.1.118
+          mkdir -p root && tar -mxzf work/modules-${KVER}.tar.gz -C root
+          DEST="root/lib/modules/${KVER}/kernel/drivers/net/wireless/aicsemi/aic8800/sdio/factory"
+          mkdir -p "${DEST}"
+          cp -f cl3566-vendor/aic8800/aic8800_bsp.ko   "${DEST}/"
+          cp -f cl3566-vendor/aic8800/aic8800_fdrv.ko  "${DEST}/"
+          cp -f cl3566-vendor/aic8800/aic8800_btlpm.ko "${DEST}/"
+          # Remove ophub old aic8800 driver so it never auto-loads.
+          rm -f root/lib/modules/${KVER}/kernel/drivers/net/wireless/aicsemi/aic8800/sdio/bsp/aic8800_sdio_bsp.ko
+          rm -f root/lib/modules/${KVER}/kernel/drivers/net/wireless/aicsemi/aic8800/sdio/btlpm/aic8800_sdio_bt.ko
+          rm -f root/lib/modules/${KVER}/kernel/drivers/net/wireless/aicsemi/aic8800/sdio/fdrv/aic8800_sdio_wlan.ko
+          sudo depmod -a -b "${PWD}/root" "${KVER}"
+          echo "=== injected modules in modules.dep ==="
+          grep -E 'aic8800_(bsp|fdrv|btlpm)' "root/lib/modules/${KVER}/modules.dep" || true
+          tar -czf work/modules-${KVER}.tar.gz -C root .
+
+      - name: Upload patched modules package (replace asset)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          gh release upload kernel_rk35xx work/modules-6.1.118.tar.gz \
+            --repo ${{ github.repository }} --clobber
+          echo "Uploaded patched modules-6.1.118.tar.gz"
